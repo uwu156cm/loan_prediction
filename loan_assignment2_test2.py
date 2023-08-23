@@ -1,87 +1,127 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[4]:
-
-
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.linear_model import Perceptron, LogisticRegression
-from sklearn.svm import SVC
-import streamlit as st
-
-# Load the dataset
-data = pd.read_csv('Loan.csv')
-
-
 # In[5]:
 
 
-# Preprocessing
-X = data[['Employed', 'Annual Salary']].values
-y = data['Bank Balance'].apply(lambda x: 1 if x > 0 else 0).values
+import pandas as pd
+import streamlit as st
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Perceptron, LogisticRegression
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score
+import joblib
+
+# Load and preprocess data
+data = pd.read_csv("Loan.csv")
+X = data[['Annual Salary', 'Bank Balance']]
+y = data['Employed']
 
 
 # In[6]:
 
 
-# Split the data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Scale data
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
 
 # In[7]:
 
 
-# Initialize models
-models = [
-    ('Perceptron', Perceptron()),
-    ('Logistic Regression', LogisticRegression()),
-    ('SVM', SVC())
-]
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
 
 # In[8]:
 
 
-# Model comparison
-best_model = None
-best_accuracy = 0
-
-for name, model in models:
-    # Cross-validation to estimate model performance
-    scores = cross_val_score(model, X_train, y_train, cv=5)
-    avg_accuracy = np.mean(scores)
-    
-    if avg_accuracy > best_accuracy:
-        best_accuracy = avg_accuracy
-        best_model = model
+# Define models
+models = {
+    "Perceptron": Perceptron(),
+    "Logistic Regression": LogisticRegression(),
+    "SVM": SVC()
+}
 
 
 # In[9]:
 
 
-# Train the best model on the full training set
-best_model.fit(X_train, y_train)
+# Train and compare models
+best_model = None
+best_accuracy = 0.0
+results = []
+
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    
+    results.append((name, accuracy))
+    
+    if accuracy > best_accuracy:
+        best_accuracy = accuracy
+        best_model = model
+
+
+# In[10]:
+
+
+# Save best model
+joblib.dump(best_model, "loan_trainModel.pkl")
 
 
 # In[11]:
 
 
-# Streamlit app
-st.title('Loan Eligibility Prediction')
+# Minimum bank balance requirement for loan eligibility
+MIN_BANK_BALANCE = 10000
+#Because the minimum deposit rate to create a bank account in most of Myanmar bank is 10000mmk
 
-salary = st.number_input('Enter your annual salary:')
 
-if st.button('Predict'):
-    employed = 1  # For simplicity, assuming the user is employed
-    input_data = np.array([[employed, salary]])
-    prediction = best_model.predict(input_data)
+# In[12]:
+
+
+# Create Streamlit app
+def predict_loan_eligibility(salary, balance):
+    if balance < MIN_BANK_BALANCE:
+        return 0  # Not eligible due to low bank balance
     
-    if prediction == 1:
-        st.write('Congratulations! You are likely eligible for a loan.')
-    else:
-        st.write('Sorry, you might not be eligible for a loan.')
+    features = scaler.transform([[salary, balance]])
+    prediction = best_model.predict(features)
+    return prediction[0]
+
+def main():
+    st.title("Loan Eligibility Prediction")
+
+    st.write("Enter the employee's annual salary and bank balance:")
+    salary = st.number_input("Annual Salary", min_value=0)
+    balance = st.number_input("Bank Balance", min_value=0)
+
+    if st.button("Predict Loan Eligibility"):
+        eligibility = predict_loan_eligibility(salary, balance)
+        if eligibility == 1:
+            st.success("Employee is eligible for a loan.")
+        else:
+            st.warning("Employee is not eligible for a loan.")
+
+    st.write("## Model Comparison Results")
+    df_results = pd.DataFrame(results, columns=["Model", "Accuracy"])
+    st.table(df_results)
+
+
+# In[13]:
+
+
+if __name__ == "__main__":
+    main()
+
+
+# In[ ]:
+
+
+
 
 
 # In[ ]:
